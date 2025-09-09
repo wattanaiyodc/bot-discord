@@ -4,12 +4,12 @@ const { askQuestionFlow, markUserFailed } = require("./utils");
 const QUESTION_SETS = [
   {
     question: "เล่น talerunner กันมั้ย",
-    answers: ["ไม่เล่น", "รักนะ Corgi"],
-    followUp: { question: "กูรู้นะว่ามึงเล่น", answers: ["รักนะ Corgi"] }
+    answers: ["ไม่เล่น", "รักนะ corgi"],
+    followUp: { question: "กูรู้นะว่ามึงเล่น", answers: ["รักนะ corgi"] }
   },
   {
     question: "วันนี้อยากเล่นเกมอะไร",
-    answers: ["talesrunner", "รักนะ Corgi"]
+    answers: ["talesrunner", "รักนะ corgi"]
   },
   {
     question: "ห้องนี้คือห้องของใคร",
@@ -30,31 +30,42 @@ function getRandomQuestionSet() {
 // Ask Random Question with special pass for "รักนะ corgi"
 async function askRandomQuestion(channel, userId, timeout) {
   const questionSet = getRandomQuestionSet();
-  const questions = [questionSet];
+  let result;
 
-  const firstAnswerResult = await askQuestionFlow(channel, userId, questions, timeout);
+  // ❓ คำถามแรก
+  result = await askQuestionFlow(channel, userId, [questionSet], timeout);
 
-  if (!firstAnswerResult.result) {
+  // ✅ ถ้าพิมพ์ "รักนะ corgi" → ผ่านทันที
+  if (result.answer?.toLowerCase() === "รักนะ corgi") {
+    console.log(`[Pass Free] ${userId} → ตอบ "รักนะ corgi", ผ่านทันที`);
+    return { result: true, answer: "รักนะ corgi" };
+  }
+
+  // ❌ ถ้าตอบผิด/ไม่ตอบ
+  if (!result.result) {
     markUserFailed(userId);
     console.log(`[Fail] ${userId} → ตอบผิด/ไม่ตอบ`);
-    return firstAnswerResult;
+    return result;
   }
 
-  // ถ้าตอบ "รักนะ corgi" รอบแรก → pass free
-  if (firstAnswerResult.answer?.toLowerCase() === "รักนะ corgi") {
-    console.log(`[Pass Free] ${userId} → ตอบ "รักนะ corgi" รอบแรก, ผ่านทันที`);
-    return firstAnswerResult;
-  }
-
-  // ถ้าไม่ใช่ "รักนะ corgi" → ตรวจสอบ follow-up ปกติ
+  // 👉 ถ้ามี follow-up
   if (questionSet.followUp) {
-    questions.push(questionSet.followUp);
-    const followUpResult = await askQuestionFlow(channel, userId, questions.slice(1), timeout);
-    if (!followUpResult.result) markUserFailed(userId);
-    return followUpResult;
+    result = await askQuestionFlow(channel, userId, [questionSet.followUp], timeout);
+
+    // ✅ ถ้าพิมพ์ "รักนะ corgi" → ผ่านทันที
+    if (result.answer?.toLowerCase() === "รักนะ corgi") {
+      console.log(`[Pass Free] ${userId} → ตอบ "รักนะ corgi" (follow-up), ผ่านทันที`);
+      return { result: true, answer: "รักนะ corgi" };
+    }
+
+    // ❌ ถ้าตอบผิด/ไม่ตอบ follow-up
+    if (!result.result) {
+      markUserFailed(userId);
+      console.log(`[Fail] ${userId} → ตอบผิด/ไม่ตอบ (follow-up)`);
+    }
   }
 
-  return firstAnswerResult;
+  return result;
 }
 
 module.exports = { askRandomQuestion };
