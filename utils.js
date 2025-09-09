@@ -67,8 +67,28 @@ function deleteMessagesLater(messages, delay = DELETE_DELAY) {
 // ----------------- Dynamic Question -----------------
 async function askQuestionFlow(channel, userId, questions, timeout = TIMEOUT_MS) {
   let lastResult = null;
+  let isFirstQuestion = true;
+
   for (const q of questions) {
-    const questionMsg = await channel.send(`<@${userId}> ${q.text}`);
+    // รองรับทั้ง field แบบเก่า/ใหม่
+    const rawText = q.question ?? q.text;
+    const answers = q.answers ?? q.expectedAnswers ?? [];
+
+    // ถ้า malformed → แจ้งและข้าม
+    if (!rawText || !Array.isArray(answers)) {
+      console.warn("[askQuestionFlow] malformed question object:", q);
+      continue;
+    }
+
+    // hint เฉพาะคำถามแรกถ้าเคย fail
+    const hint = (isFirstQuestion && typeof hasUserFailed === "function" && hasUserFailed(userId))
+      ? " 💡 "
+      : "";
+
+    const questionText = `${rawText}${hint}`;
+    console.log(`[Question] ${userId} -> ${questionText}`);
+
+    const questionMsg = await channel.send(`<@${userId}> ${questionText}`);
     let collectedMessage;
 
     lastResult = await new Promise((resolve) => {
@@ -80,21 +100,34 @@ async function askQuestionFlow(channel, userId, questions, timeout = TIMEOUT_MS)
 
       collector.on("collect", (msg) => {
         collectedMessage = msg;
-        const answer = msg.content.trim().toLowerCase();
-        const matched = q.expectedAnswers.find(e => answer.includes(e.toLowerCase()));
-        resolve({ result: !!matched, botMsg: questionMsg, userMsg: collectedMessage, answer });
+        const answerRaw = msg.content.trim();
+        const answer = answerRaw.toLowerCase();
+        const matched = answers.find(a => typeof a === "string" && answer.includes(a.toLowerCase()));
+        console.log(`[Answer collected] ${userId} -> "${answerRaw}" (matched: ${matched ?? false})`);
+        resolve({ result: !!matched, botMsg: questionMsg, userMsg: collectedMessage, answer: answerRaw });
       });
 
       collector.on("end", (collected) => {
-        if (collected.size === 0) resolve({ result: false, botMsg: questionMsg, userMsg: null, answer: null });
+        if (collected.size === 0) {
+          console.log(`[Answer collected] ${userId} -> (no reply)`);
+          resolve({ result: false, botMsg: questionMsg, userMsg: null, answer: null });
+        }
       });
     });
 
-    deleteMessagesLater([questionMsg, collectedMessage], [5000, 500]); // ลบข้อความ bot ก่อน 5 วินาที, user 0.5 วินาที
+    // ลบข้อความ (bot,user) — ปรับ delays ตามที่ต้องการ
+    deleteMessagesLater([questionMsg, collectedMessage], [5000, 500]);
 
-    if (lastResult.result && q.followUp) questions.push(q.followUp);
+    // ถ้าตอบถูกและมี followUp ให้ถามต่อ
+    if (lastResult.result && q.followUp) {
+      // ensure followUp uses same shape (question/text + answers/expectedAnswers)
+      questions.push(q.followUp);
+    }
+
     if (!lastResult.result) break;
+    isFirstQuestion = false;
   }
+
   return lastResult;
 }
 

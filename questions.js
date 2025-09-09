@@ -12,8 +12,12 @@ const QUESTION_SETS = [
     answers: ["talesrunner", "รักนะ Corgi"]
   },
   {
-    question: "บอกรัก Corgi ก่อนสิ",
-    answers: ["รักนะ Corgi"]
+    question: "ห้องนี้คือห้องของใคร",
+    answers: ["แรคคูน", "รักนะ corgi"],
+    followUp: {
+      question: "แรคคูนชื่ออะไร",
+      answers: ["ไฟล์ท", "รักนะ corgi"]
+    }
   }
 ];
 
